@@ -13,34 +13,64 @@ namespace Cars
     {
         static void Main(string[] args)
         {
-            var cars = ProcessFile("fuel.csv");
+            var cars = ProcessCars("fuel.csv");
+            var manufacturers = ProcessManufacturers("manufacturers.csv");
 
             var query =
                 from car in cars
-                where car.Manufacturer == "BMW" && car.Year == 2016
+                join manufacturer in manufacturers 
+                    on new { car.Manufacturer, car.Year } 
+                        equals new { Manufacturer = manufacturer.Name, manufacturer.Year }
                 orderby car.Combined descending, car.Name ascending
                 select new
                 {
-                    car.Manufacturer,
+                    manufacturer.Headquarters,
                     car.Name,
                     car.Combined
                 };
 
-            var result = cars.Select(c => new {
-                                                 c.Manufacturer,
-                                                 c.Name,
-                                                 c.Combined
-                                              });
+            var query2 =
+                cars.Join(manufacturers,
+                            c => new { c.Manufacturer, c.Year },
+                            m => new { Manufacturer = m.Name, m.Year },
+                            (c, m) => new
+                            {
+                               Car = c,
+                               Manufacturer = m
+                            })
+                     .OrderByDescending(c => c.Car.Combined)
+                     .ThenBy(c => c.Car.Name)
+                     .Select(c => new {
+                         c.Manufacturer.Headquarters,
+                         c.Car.Name,
+                         c.Car.Combined
+                     });
 
-            Console.WriteLine(result);
-            
-            foreach (var car in query.Take(10))
+            foreach (var car in query2.Take(10))
             {
-                Console.WriteLine($"{car.Manufacturer} {car.Name} : {car.Combined}");
+                Console.WriteLine($"{car.Headquarters,-12} {car.Name,-20} : {car.Combined}");
             }
         }
 
-        private static List<Car> ProcessFile(string path)
+        private static List<Manufacturer> ProcessManufacturers(string path)
+        {
+            var query =
+                File.ReadAllLines(path)
+                    .Where(l => l.Length > 1)
+                    .Select(l =>
+                    {
+                        var columns = l.Split(',');
+                        return new Manufacturer
+                        {
+                            Name = columns[0],
+                            Headquarters = columns[1],
+                            Year = int.Parse(columns[2])
+                        };
+                    });
+            return query.ToList();
+        }
+
+        private static List<Car> ProcessCars(string path)
         {
             var query =
                     File.ReadAllLines(path)
@@ -58,6 +88,8 @@ namespace Cars
 
 
     }
+
+
 
     public static class CarExtensions
     {
