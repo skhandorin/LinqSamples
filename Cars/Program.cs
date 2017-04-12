@@ -14,27 +14,73 @@ namespace Cars
         static void Main(string[] args)
         {
             var cars = ProcessFile("fuel.csv");
-            foreach (var car in cars)
+
+            var query =
+                from car in cars
+                where car.Manufacturer == "BMW" && car.Year == 2016
+                orderby car.Combined descending, car.Name ascending
+                select new
+                {
+                    car.Manufacturer,
+                    car.Name,
+                    car.Combined
+                };
+
+            var result = cars.Select(c => new {
+                                                 c.Manufacturer,
+                                                 c.Name,
+                                                 c.Combined
+                                              });
+
+            Console.WriteLine(result);
+            
+            foreach (var car in query.Take(10))
             {
-                Console.WriteLine(car.Name);
+                Console.WriteLine($"{car.Manufacturer} {car.Name} : {car.Combined}");
             }
         }
 
         private static List<Car> ProcessFile(string path)
         {
-            //return File.ReadAllLines(path)
-            //            .Skip(1)
-            //            .Where(line => line.Length > 1)
-            //            .Select(Car.ParseFromCsv)
-            //            .ToList();
-
             var query =
+                    File.ReadAllLines(path)
+                        .Skip(1)
+                        .Where(line => line.Length > 1)
+                        .ToCar();
+
+            var query2 =
                 from line in File.ReadAllLines(path).Skip(1)
                 where line.Length > 1
                 select Car.ParseFromCsv(line);
+
             return query.ToList();
         }
 
 
+    }
+
+    public static class CarExtensions
+    {
+        private static NumberFormatInfo _nfi = new CultureInfo("en-US", false).NumberFormat;
+
+        public static IEnumerable<Car> ToCar(this IEnumerable<string> source)
+        {
+            foreach (var line in source)
+            {
+                var columns = line.Split(',');
+
+                yield return new Car
+                {
+                    Year = int.Parse(columns[0]),
+                    Manufacturer = columns[1],
+                    Name = columns[2],
+                    Displacement = double.Parse(columns[3], _nfi),
+                    Cylinders = int.Parse(columns[4]),
+                    City = int.Parse(columns[5]),
+                    Highway = int.Parse(columns[6]),
+                    Combined = int.Parse(columns[7])
+                };
+            }
+        }
     }
 }
