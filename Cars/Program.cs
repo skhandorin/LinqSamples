@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,170 +14,48 @@ namespace Cars
     {
         static void Main(string[] args)
         {
-            var cars = ProcessCars("fuel.csv");
-            var manufacturers = ProcessManufacturers("manufacturers.csv");
+            CreateXml();
+            QueryXml();
+        }
 
-            var query_join =
-                from car in cars
-                join manufacturer in manufacturers 
-                    on new { car.Manufacturer, car.Year } 
-                        equals new { Manufacturer = manufacturer.Name, manufacturer.Year }
-                orderby car.Combined descending, car.Name ascending
-                select new
-                {
-                    manufacturer.Headquarters,
-                    car.Name,
-                    car.Combined
-                };
+        private static void QueryXml()
+        {
+            var ns = (XNamespace)"http://pluralsight.com/cars/2016";
+            var ex = (XNamespace)"http://pluralsight.com/cars/2016/ex";
+            var document = XDocument.Load("fuel.xml");
 
-            var query_join2 =
-                cars.Join(manufacturers,
-                            c => new { c.Manufacturer, c.Year },
-                            m => new { Manufacturer = m.Name, m.Year },
-                            (c, m) => new
-                            {
-                               Car = c,
-                               Manufacturer = m
-                            })
-                     .OrderByDescending(c => c.Car.Combined)
-                     .ThenBy(c => c.Car.Name)
-                     .Select(c => new {
-                         c.Manufacturer.Headquarters,
-                         c.Car.Name,
-                         c.Car.Combined
-                     });
+            var query =
+                from element in document.Element(ns + "Cars")?.Elements(ex + "Car") 
+                                                            ?? Enumerable.Empty<XElement>()
+                where element.Attribute("Manufacturer")?.Value == "BMW"
+                select element.Attribute("Name").Value;
 
-            //foreach (var car in query_join2.Take(10))
-            //{
-            //    Console.WriteLine($"{car.Headquarters,-12} {car.Name,-20} : {car.Combined}");
-            //}
-
-            var query_group =
-                from car in cars
-                group car by car.Manufacturer.ToUpper() into manufacturer
-                orderby manufacturer.Key
-                select manufacturer;
-
-            var query_group2 =
-                cars.GroupBy(c => c.Manufacturer.ToUpper())
-                    .OrderBy(g => g.Key);
-
-            //foreach (var group in query_group2)
-            //{
-            //    Console.WriteLine(group.Key);
-            //    foreach (var car in group.OrderByDescending(c => c.Combined).Take(2))
-            //    {
-            //        Console.WriteLine($"\t{car.Name} : {car.Combined}");
-            //    }
-            //}
-
-            var q_groupjoin =
-                from manufacturer in manufacturers
-                join car in cars on manufacturer.Name equals car.Manufacturer
-                    into carGroup
-                orderby manufacturer.Name
-                select new
-                {
-                    Manufacturer = manufacturer,
-                    Cars = carGroup
-                };
-
-            var q_groupjoin2 =
-                manufacturers.GroupJoin(cars, m => m.Name, c => c.Manufacturer, 
-                                        (m, g) => new
-                                        {
-                                            Manufacturer = m,
-                                            Cars = g
-                                        })
-                .OrderBy(m => m.Manufacturer.Name);
-
-            //foreach (var group in q_groupjoin)
-            //{
-            //    Console.WriteLine($"{group.Manufacturer.Name}: {group.Manufacturer.Headquarters}");
-            //    foreach (var car in group.Cars.OrderByDescending(c => c.Combined).Take(2))
-            //    {
-            //        Console.WriteLine($"\t{car.Name} : {car.Combined}");
-            //    }
-            //}
-
-            var query_country =
-                from car in cars
-                join manufacturer in manufacturers
-                    on car.Manufacturer equals manufacturer.Name
-                group new { Car = car, Manufacturer = manufacturer } by manufacturer.Headquarters into country
-                orderby country.Key
-                select country;
-
-            //foreach (var country in query_country)
-            //{
-            //    Console.WriteLine(country.Key);
-            //    foreach (var car in country.OrderByDescending(c => c.Car.Combined).Take(3))
-            //    {
-            //        Console.WriteLine($"\t{car.Manufacturer.Name} {car.Car.Name} : {car.Car.Combined}");
-            //    }
-            //}
-
-            var query_country_alternative =
-                from manufacturer in manufacturers
-                join car in cars on manufacturer.Name equals car.Manufacturer
-                    into carGroup
-                orderby manufacturer.Name
-                select new
-                {
-                    Manufacturer = manufacturer,
-                    Cars = carGroup
-                } into result
-                group result by result.Manufacturer.Headquarters into country
-                orderby country.Key
-                select country;
-            // here then we need SelectMany for flattening
-
-            //foreach (var country in query_country_alternative)
-            //{
-            //    Console.WriteLine(country.Key);
-            //    foreach (var car in country.SelectMany(g => g.Cars).OrderByDescending(c => c.Combined).Take(3))
-            //    {
-            //        Console.WriteLine($"\t{car.Manufacturer} {car.Name} : {car.Combined}");
-            //    }
-            //}
-
-            var query_aggregation =
-                from car in cars
-                group car by car.Manufacturer into carGroup
-                select new
-                {
-                    Name = carGroup.Key,
-                    Max = carGroup.Max(c => c.Combined),
-                    Min = carGroup.Min(c => c.Combined),
-                    Avg = carGroup.Average(c => c.Combined)
-                } into result
-                orderby result.Max descending
-                select result;
-
-            var query_aggregation2 =
-                cars.GroupBy(c => c.Manufacturer)
-                    .Select(g =>
-                    {
-                        var results = g.Aggregate(new CarStatistics(),
-                                            (acc, c) => acc.Accumulate(c),
-                                            acc => acc.Compute());
-                        return new
-                        {
-                            Name = g.Key,
-                            Avg = results.Avg,
-                            Max = results.Max,
-                            Min = results.Min
-                        };
-                    })
-                    .OrderByDescending(r => r.Max);
-
-            foreach (var result in query_aggregation)
+            foreach (var name in query)
             {
-                Console.WriteLine(result.Name);
-                Console.WriteLine($"\t Max: {result.Max}");
-                Console.WriteLine($"\t Min: {result.Min}");
-                Console.WriteLine($"\t Avg: {result.Avg,5:N2}");
+                Console.WriteLine(name);
             }
+        }
+
+        private static void CreateXml()
+        {
+            var records = ProcessCars("fuel.csv");
+
+            var ns = (XNamespace)"http://pluralsight.com/cars/2016";
+            var ex = (XNamespace)"http://pluralsight.com/cars/2016/ex";
+            var documet = new XDocument();
+            var cars = new XElement(ns + "Cars",
+
+                from record in records
+                select new XElement(ex + "Car",
+                                new XAttribute("Name", record.Name),
+                                new XAttribute("Combined", record.Combined),
+                                new XAttribute("Manufacturer", record.Manufacturer))
+            );
+
+            cars.Add(new XAttribute(XNamespace.Xmlns + "ex", ex));
+
+            documet.Add(cars);
+            documet.Save("fuel.xml");
         }
 
         private static List<Manufacturer> ProcessManufacturers(string path)
